@@ -122,7 +122,7 @@ def main(argv):
  
  
     # 05. compute HMAC
-    _hmac = compute_hmac_sha256(_ki, _salt, _iv, _encrypted_data)
+    _hmac = compute_hmac_sha256(_ki, _encrypted_data)
  
  
     # 06. write encrypted data

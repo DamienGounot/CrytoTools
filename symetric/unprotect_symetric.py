@@ -102,38 +102,33 @@ def main(argv):
         with open(_input_file_path, "rb") as f_in:
             _salt = f_in.read(8)
             _iv = f_in.read(16)
-            _cipher_data = f_in.read(_sz-32)
+            _cipher_data = f_in.read(_sz-56)
             _sign = f_in.read(32)
-            # 02. derive password -> km
     
+    
+    # 02. derive password -> km
     _km = deriv_password(_password, _salt, 6000)
-
-            _plain_data = f_in.read()
- 
  
     # 03. derive km -> kc & ki
     _kc, _ki = deriv_master_key(_km)
  
+    # 04. uncipher data
+    _uncipher_data = unprotect_buffer(_cipher_data, _kc, _iv)
  
-    # 04. encrypt data
-    
-     
-    _encrypted_data = protect_buffer(_plain_data, _kc, _iv)
+    # 05. verify HMAC
+    _hmac = verify_hmac_sha256(_ki, _sign, _cipher_data)
+    if(_hmac):
+        print("HMAC Ok!")
+    else:
+        print("Error HMAC !")
  
  
-    # 05. compute HMAC
-    _hmac = compute_hmac_sha256(_ki, _salt, _iv, _encrypted_data)
- 
- 
-    # 06. write encrypted data
+    # 06. write uncipher data
     with open(_output_file_path, "wb") as f_out:
-        f_out.write(_salt)
-        f_out.write(_iv)
-        f_out.write(_encrypted_data)
-        f_out.write(_hmac)
+        f_out.write(_uncipher_data)
     # end with
  
-    print("protection done !")
+    print("uncipher done !")
 # end main
  
  
