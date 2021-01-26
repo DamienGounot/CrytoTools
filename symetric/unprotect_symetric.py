@@ -111,24 +111,24 @@ def main(argv):
  
     # 03. derive km -> kc & ki
     _kc, _ki = deriv_master_key(_km)
+
  
-    # 04. uncipher data
-    _uncipher_data = unprotect_buffer(_cipher_data, _kc, _iv)
- 
-    # 05. verify HMAC
+    # 04. verify HMAC
     _hmac = verify_hmac_sha256(_ki, _sign, _cipher_data)
     if(_hmac):
-        print("HMAC Ok!")
+        print("HMAC Ok! --> unciphering data...")
+        # 05. uncipher data
+        _uncipher_data = unprotect_buffer(_cipher_data, _kc, _iv)
+        
+        # 06. write uncipher data
+        with open(_output_file_path, "wb") as f_out:
+            f_out.write(_uncipher_data)
+        # end with
+ 
+        print("uncipher done !")
     else:
-        print("Error HMAC !")
- 
- 
-    # 06. write uncipher data
-    with open(_output_file_path, "wb") as f_out:
-        f_out.write(_uncipher_data)
-    # end with
- 
-    print("uncipher done !")
+        print("Error HMAC ! --> abort")
+
 # end main
  
  
