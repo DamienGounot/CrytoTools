@@ -88,10 +88,8 @@ def main(argv):
     rsa_enc_pub_pem = open(public_key_receiver).read()
     rsa_sign_priv_pem = open(private_key_sender).read()
  
- 
     # 03. protect plain_data
     encrypted_data = protect_buffer(plain_data, rsa_enc_pub_pem)
- 
  
     # 04. signature
     signature = sign_buffer(encrypted_data, rsa_sign_priv_pem)
@@ -109,3 +107,4 @@ def main(argv):
  
 if __name__ == "__main__":
     main(sys.argv)
+# end if
