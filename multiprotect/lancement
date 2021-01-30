@@ -1,0 +1,1 @@
+python.exe .\multiprotect.py in out ..\keys\my_private.pem ..\keys\my_public.pem ..\keys\1_public.pem ..\keys\2_public.pem ..\keys\3_public.pem ..\keys\4_public.pem ..\keys\5_public.pem
