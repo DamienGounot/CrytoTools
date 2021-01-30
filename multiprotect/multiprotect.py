@@ -32,6 +32,9 @@ def get_file_buffer(file: str):
             sys.exit(1)
         with open(file, "rb") as f_in:
             buffer = f_in.read()
+    else:
+        print("error: input file does not exist")
+        sys.exit(1)
     return buffer
 
 #Fonction qui calcule le SHA256 d'un buffer <---- SHA256(RSA_kpub)
@@ -81,7 +84,20 @@ def sign_buffer(data: bytes, priv_key: bytes) -> bytes:
 
 
 #----------------------Partie dechiffrement--------------------------------------
-#Fonction qui verifie la signature
+#Fonction qui verifie la signature d'un buffer
+def verify_signature(data: bytes, pub_key: bytes,signature: bytes):
+    sha256 = SHA256.new()
+    sha256.update(data)
+
+    rsa_pub_key = RSA.import_key(pub_key)
+    rsa_pss = pss.new(rsa_pub_key)
+    try:
+        rsa_pss.verify(sha256, signature)
+        print("The signature is authentic.")
+        return True
+    except (ValueError, TypeError):
+        print("The signature is not authentic.")
+        return False
 
 #Fonction qui dechiffre la clef et le vecteur d'initialisation
 
@@ -91,6 +107,18 @@ def sym_unprotect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Option
     decrypted_data = aes.decrypt(buffer)
     return unpad(decrypted_data, AES.block_size)
 
+def extract_from_input_file(input_file_path: str):
+    if os.path.exists(input_file_path):
+        _sz = os.path.getsize(input_file_path)
+        if _sz == 0:
+            print("error: file is empty")
+            sys.exit(1)
+        with open(input_file_path, "rb") as f_in:
+            _signed_data = f_in.read(_sz-256)
+            _signature = f_in.read(256)
+        return _signature, _signed_data
+
+#----------------------Partie main----------------------------------------------
 def main(argv):
 
     list_path_pub_key = []
@@ -104,22 +132,13 @@ def main(argv):
 
 # encrypt mode
     if(argv[1] == "-e"):
-
-        #init
-        input_file  = argv[2]
-        output_file     = argv[3]
-        path_my_sign_priv    = argv[4]
-        path_my_ciph_pub    = argv[5]
-
         #get all receiver(s) pub_key
-        for i in range(6,len(argv)):
+        for i in range(5,len(argv)):
             list_path_pub_key.append(argv[i])
         nb_dest = len(list_path_pub_key)
         print("Nb dest: "+str(nb_dest))
-
         #generation kc,IV
         kc,iv = gen_kc_iv()
-
         #for each receiver
         for i in range(nb_dest):
             print("user: "+str(i))
@@ -133,19 +152,34 @@ def main(argv):
             #update buffer to send
             data_to_send += (b'\x00' + actual_sha + wrap_key)
         #get input_file buffer
+        input_file = argv[2]
         plain_data = get_file_buffer(input_file)
         #cipher input_file buffer
         C = sym_protect_buffer(plain_data,kc,iv)
         #update buffer to send with Cipher
         data_to_send += (b'\x01' + C)
         #get my priv_key
+        path_my_sign_priv = argv[4]
         my_sign_priv = open(path_my_sign_priv).read()
         #sign buffer to send
         signature = sign_buffer(data_to_send,my_sign_priv)
         #update buffer to send with signature
         data_to_send += signature
         #write buffer to send to output file
+        output_file = argv[3]
         write_buffer_to_file(data_to_send,output_file)
+# decrypt mode
+    if(argv[1] == "-d"):
+        #get signature and signed_data from input_file
+        input_file = argv[2]
+        signature,signed_data = extract_from_input_file(input_file)
+        print("Signature is:"+str(signature))
+        #verify signature
+        sender_pub_key = open(argv[6]).read()
+        verify = verify_signature(signed_data,sender_pub_key,signature)
+        #taille hash --> 32bytes
+        #wrap ---> 256bytes
+        #kc = wrap_uncrypt[:32]
 
 if __name__ == "__main__":
     main(sys.argv)
