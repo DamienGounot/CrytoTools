@@ -18,7 +18,6 @@ def sha256sum_file(filename: str, chunk_sz=512) -> Optional[bytes]:
         while len(data) > 0:
             sha256_ctx.update(data)
             data = f_in.read(chunk_sz)
-    # return sha256ctx.digest
     return sha256_ctx.digest()
 
     
