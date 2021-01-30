@@ -11,19 +11,6 @@ from Crypto.Util.Padding import pad
  
 from typing import Tuple
  
-# Fonction qui genere des bicles RSA
-def generate_rsa_keys(bits_length: int):
-  rsa = RSA.generate(bits_length)
-  rsa_pub = rsa.publickey()
-  return rsa.export_key('PEM'), rsa_pub.export_key('PEM')
- 
- 
-def generate_rsa_obj_keys(in_bits_length: int) -> Tuple[RSA.RsaKey, RSA.RsaKey]:
-    rsa_private: RSA.RsaKey = RSA.generate(in_bits_length)
-    rsa_public: RSA.RsaKey = rsa_private.publickey()
-    return rsa_private, rsa_public
- 
- 
 # Fonction qui protege en Integrite un fichier == Signature
 def sign_buffer(data: bytes, priv_key: bytes) -> bytes:
   """
