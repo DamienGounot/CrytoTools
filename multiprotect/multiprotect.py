@@ -17,43 +17,46 @@ from typing import Tuple
 #----------------------Partie chiffrement--------------------------------------
 # 0x00 || SHA256(kpub-1) || RSA_kpub-1(Kc || IV) || ... || 0x00 || SHA256(kpub-N) || RSA_kpub-N(Kc || IV) || 0x01 || C || Sign
 
+#Fonction qui ecrit un buffer dans un fichier
+def write_buffer_to_file(buffer: bytes, file: str):
+    f_out = open(file, "wb")
+    f_out.write(buffer)
 
-#Fonction qui calcule le SHA256 d'un fichier de clef publique <---- SHA256(RSA_kpub)
-def sha256sum_file(filename: str, chunk_sz=512) -> Optional[bytes]:
-    # Checks + open file
-    if not os.path.exists(filename):
-        return None
+#Fonction qui retourne le contenu d'un fichier
+def get_file_buffer(file: str):
+
+    if os.path.exists(file):
+        _sz = os.path.getsize(file)
+        if _sz == 0:
+            print("error: file is empty")
+            sys.exit(1)
+        with open(file, "rb") as f_in:
+            buffer = f_in.read()
+    return buffer
+
+#Fonction qui calcule le SHA256 d'un buffer <---- SHA256(RSA_kpub)
+def sha256_buffer(buffer: bytes, chunk_sz=512) -> Optional[bytes]:
     # sha256 ctx init
     sha256_ctx = SHA256.new()
     # read file + update sha256 ctx
-    with open(filename, 'rb') as f_in:
-        data = f_in.read(chunk_sz)
-        while len(data) > 0:
-            sha256_ctx.update(data)
-            data = f_in.read(chunk_sz)
+    data = buffer.encode()
+    sha256_ctx.update(data)
     return sha256_ctx.digest()
 
 #Fonction qui genere une clef AES et un vecteur d'initialisation <---- Kc,IV
-def gen_kc_iv(kc: bytes, iv: bytes):
+def gen_kc_iv():
     # 01. generate symetric key: kc
   kc = get_random_bytes(AES.key_size[2]) # AES.key_size[2] == 32 | 256 bits
   iv = get_random_bytes(AES.block_size) # 16 bytes == 128bits
   return kc,iv
 
 #Fonction qui chiffre la clef et le vecteur d'initialisation <--- RSA_kpub(Kc || IV)
-def protect_kv_and_iv(pub_key: bytes, kc: bytes, iv: bytes):
-  # 01. encrypt `data` with AES-256-CBC -> encrypted_data
-  aes = AES.new(kc, AES.MODE_CBC, iv)
-  padded_data = pad(data, AES.block_size)
-  encrypted_data = aes.encrypt(padded_data)
- 
-  # 02. encrypt `kc` (256bits) + iv (128 bits) with RSA-2048-OAEP -> wrap_key
+def protect_kv_and_iv(pub_key: bytes, kc: bytes, iv: bytes) -> bytes: 
+# 01. encrypt `kc` (256bits) + iv (128 bits) with RSA-2048-OAEP -> wrap_key
   rsa_pub_key = RSA.importKey(pub_key)
   rsa = PKCS1_OAEP.new(rsa_pub_key)
   wrap_key = rsa.encrypt(kc + iv)
- 
-  # 03. return kc || iv
-  return wrap_key 
+  return wrap_key  
  
 # Fonction qui chiffre un buffer (AES-CBC-256) <---- C
 def sym_protect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Optional[bytes]:
@@ -89,16 +92,61 @@ def sym_unprotect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Option
     return unpad(decrypted_data, AES.block_size)
 
 def main(argv):
+
+    list_path_pub_key = []
+    data_to_send = b''
+
 # check arguments
     if ((len(argv) < 7) or (((argv[1] != "-e")) and (argv[1] != "-d"))):
         print("Error, usage to encrypt: python {0} -e <input_file> <output_file> <my_sign_priv.pem> <my_ciph_pub.pem> [user1_ciph_pub.pem ... [userN_ciph_pub.pem]]".format(argv[0]))
         print("Error, usage to decrypt: python {0} -d <input_file> <output_file> <my_priv_ciph.pem> <my_pub_ciph.pem> <sender_sign_pub.pem>".format(argv[0]))
-        print(argv)
         sys.exit(1)
 
-# end main
- 
- 
+# encrypt mode
+    if(argv[1] == "-e"):
+
+        #init
+        input_file  = argv[2]
+        output_file     = argv[3]
+        path_my_sign_priv    = argv[4]
+        path_my_ciph_pub    = argv[5]
+
+        #get all receiver(s) pub_key
+        for i in range(6,len(argv)):
+            list_path_pub_key.append(argv[i])
+        nb_dest = len(list_path_pub_key)
+        print("Nb dest: "+str(nb_dest))
+
+        #generation kc,IV
+        kc,iv = gen_kc_iv()
+
+        #for each receiver
+        for i in range(nb_dest):
+            print("user: "+str(i))
+            actual_path_pub_key = list_path_pub_key[i]
+            #get actual receiver pub_key
+            actual_pub_key = open(actual_path_pub_key).read()
+            #compute SHA256() of actual receiver pub_key
+            actual_sha = sha256_buffer(actual_pub_key)
+            #cipher Kc and IV with pub_key of actual receiver
+            wrap_key = protect_kv_and_iv(actual_pub_key,kc,iv)
+            #update buffer to send
+            data_to_send += (b'\x00' + actual_sha + wrap_key)
+        #get input_file buffer
+        plain_data = get_file_buffer(input_file)
+        #cipher input_file buffer
+        C = sym_protect_buffer(plain_data,kc,iv)
+        #update buffer to send with Cipher
+        data_to_send += (b'\x01' + C)
+        #get my priv_key
+        my_sign_priv = open(path_my_sign_priv).read()
+        #sign buffer to send
+        signature = sign_buffer(data_to_send,my_sign_priv)
+        #update buffer to send with signature
+        data_to_send += signature
+        #write buffer to send to output file
+        write_buffer_to_file(data_to_send,output_file)
+
 if __name__ == "__main__":
     main(sys.argv)
 # end if
