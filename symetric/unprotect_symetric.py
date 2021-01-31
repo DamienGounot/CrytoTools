@@ -4,12 +4,10 @@ import string
 import binascii
 from struct import pack
 from typing import Optional
- 
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Hash import SHA256, HMAC
 from Crypto.Util.Padding import pad, unpad
- 
  
 def deriv_password(password: str, salt:bytes, counter: int) -> Optional[bytes]:
     """
@@ -35,10 +33,7 @@ def deriv_password(password: str, salt:bytes, counter: int) -> Optional[bytes]:
         sha256_ctx.update(pack('<I', i))
         hi = sha256_ctx.digest()
  
-    # 03. return Hn
-    return hi
-# end deriv_password
- 
+    return hi 
  
 def deriv_master_key(km: bytes) -> bytes:
     """
@@ -59,28 +54,20 @@ def deriv_master_key(km: bytes) -> bytes:
  
     return kc, ki
  
- 
 def compute_hmac_sha256(key: bytes, *buffers) -> bytes:
     _hmac = HMAC.new(key, digestmod=SHA256.new())
     for b in buffers:
         _hmac.update(b)
-    return _hmac.digest()
-# end compute_hmac_sha256
- 
+    return _hmac.digest() 
  
 def verify_hmac_sha256(key: bytes, hmac_value: bytes, *buffers):
     _hmac = compute_hmac_sha256(key, *buffers)
     return _hmac == hmac_value
-# end verify_hmac_sha256
  
 def unprotect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Optional[bytes]:
     aes = AES.new(kc, AES.MODE_CBC, iv)
     decrypted_data = aes.decrypt(buffer)
     return unpad(decrypted_data, AES.block_size)
-
-
-
-
 
 def main(argv):
     # 00. check arguments
@@ -90,8 +77,6 @@ def main(argv):
     _password = argv[1]
     _input_file_path = argv[2]
     _output_file_path = argv[3]
- 
- 
     # 01. read input file
     _cipher_data = b''
     if os.path.exists(_input_file_path):
@@ -104,34 +89,22 @@ def main(argv):
             _iv = f_in.read(16)
             _cipher_data = f_in.read(_sz-56)
             _sign = f_in.read(32)
-    
-    
     # 02. derive password -> km
     _km = deriv_password(_password, _salt, 6000)
- 
     # 03. derive km -> kc & ki
     _kc, _ki = deriv_master_key(_km)
-
- 
     # 04. verify HMAC
     _hmac = verify_hmac_sha256(_ki, _sign, _cipher_data)
     if(_hmac):
         print("HMAC Ok! --> unciphering data...")
         # 05. uncipher data
         _uncipher_data = unprotect_buffer(_cipher_data, _kc, _iv)
-        
         # 06. write uncipher data
         with open(_output_file_path, "wb") as f_out:
             f_out.write(_uncipher_data)
-        # end with
- 
         print("uncipher done !")
     else:
         print("Error HMAC ! --> abort")
-
-# end main
- 
  
 if __name__ == "__main__":
     main(sys.argv)
-# end if
