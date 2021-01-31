@@ -84,6 +84,18 @@ def sign_buffer(data: bytes, priv_key: bytes) -> bytes:
 
 
 #----------------------Partie dechiffrement--------------------------------------
+#Fonction qui retourne la signature, et le contenu signé d'un fichier
+def extract_from_input_file(input_file_path: str):
+    if os.path.exists(input_file_path):
+        _sz = os.path.getsize(input_file_path)
+        if _sz == 0:
+            print("error: file is empty")
+            sys.exit(1)
+        with open(input_file_path, "rb") as f_in:
+            _signed_data = f_in.read(_sz-256)
+            _signature = f_in.read(256)
+        return _signature, _signed_data
+
 #Fonction qui verifie la signature d'un buffer
 def verify_signature(data: bytes, pub_key: bytes,signature: bytes):
     sha256 = SHA256.new()
@@ -99,7 +111,48 @@ def verify_signature(data: bytes, pub_key: bytes,signature: bytes):
         print("The signature is not authentic.")
         return False
 
+#Fonction qui retrouve la clef et le vecteur d'initialisation qui nous sont associées
+def get_ciphered_kc_iv(input_file_path: str,my_sha256: bytes):
+    if os.path.exists(input_file_path):
+        _sz = os.path.getsize(input_file_path)
+        if _sz == 0:
+            print("error: file is empty")
+            sys.exit(1)
+        with open(input_file_path, "rb") as f_in:
+            while(True):
+                mark = f_in.read(1)
+                if(mark == b'\x00'):
+                    actual_sha = f_in.read(32)
+                    actual_wrap = f_in.read(256)
+                    if(actual_sha == my_sha256):
+                        return actual_wrap
+
+#Fonction qui extrait le contenu chiffré
+def extract_ciphered_data(input_file_path: str):
+    if os.path.exists(input_file_path):
+        _sz = os.path.getsize(input_file_path)
+        if _sz == 0:
+            print("error: file is empty")
+            sys.exit(1)
+        with open(input_file_path, "rb") as f_in:
+            while(True):
+                mark = f_in.read(1)
+                if(mark == b'\x00'):
+                    actual_sha = f_in.read(32)
+                    actual_wrap = f_in.read(256)
+                else:
+                    reste = f_in.read()
+                    cipher_data = reste[:-256]
+                    return cipher_data
+
 #Fonction qui dechiffre la clef et le vecteur d'initialisation
+def uncipher_kc_iv(wrap: bytes,my_priv_key: bytes):
+    rsa_priv_key = RSA.importKey(my_priv_key)
+    rsa = PKCS1_OAEP.new(rsa_priv_key)
+    wrap_uncrypt = rsa.decrypt(wrap)
+    kc = wrap_uncrypt[:32]
+    iv = wrap_uncrypt[32:]
+    return kc,iv
 
 # Fonction qui dechiffre un buffer (AES-CBC-256)
 def sym_unprotect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Optional[bytes]:
@@ -107,16 +160,6 @@ def sym_unprotect_buffer(buffer: bytes, kc: bytes, iv:Optional[bytes]) -> Option
     decrypted_data = aes.decrypt(buffer)
     return unpad(decrypted_data, AES.block_size)
 
-def extract_from_input_file(input_file_path: str):
-    if os.path.exists(input_file_path):
-        _sz = os.path.getsize(input_file_path)
-        if _sz == 0:
-            print("error: file is empty")
-            sys.exit(1)
-        with open(input_file_path, "rb") as f_in:
-            _signed_data = f_in.read(_sz-256)
-            _signature = f_in.read(256)
-        return _signature, _signed_data
 
 #----------------------Partie main----------------------------------------------
 def main(argv):
@@ -173,13 +216,31 @@ def main(argv):
         #get signature and signed_data from input_file
         input_file = argv[2]
         signature,signed_data = extract_from_input_file(input_file)
-        print("Signature is:"+str(signature))
         #verify signature
         sender_pub_key = open(argv[6]).read()
         verify = verify_signature(signed_data,sender_pub_key,signature)
-        #taille hash --> 32bytes
-        #wrap ---> 256bytes
-        #kc = wrap_uncrypt[:32]
+        if(not verify):
+            sys.exit(1)
+        else:
+            #get my pub_key
+            path_my_pub_key = argv[5]
+            my_pub_key = open(path_my_pub_key).read()
+            #compute SHA256() of my_pub_key
+            my_sha = sha256_buffer(my_pub_key)
+            #extract my (kc,iv)
+            ciphered_kc_iv = get_ciphered_kc_iv(input_file,my_sha)
+            #get my priv_key
+            path_my_priv_key = argv[4]
+            my_priv_key = open(path_my_priv_key).read()
+            #get kc and iv
+            kc,iv = uncipher_kc_iv(ciphered_kc_iv,my_priv_key)
+            #uncipher data
+            C = extract_ciphered_data(input_file)
+            uncipher_data = sym_unprotect_buffer(C,kc,iv)
+            #write data to output file
+            output_file = argv[3]
+            write_buffer_to_file(uncipher_data,output_file)
+            print("Write done !")
 
 if __name__ == "__main__":
     main(sys.argv)
